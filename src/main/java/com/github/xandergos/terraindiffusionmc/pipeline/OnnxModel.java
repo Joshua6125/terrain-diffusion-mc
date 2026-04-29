@@ -33,6 +33,7 @@ public final class OnnxModel implements AutoCloseable {
     private static final AtomicBoolean providerLoggedOnce = new AtomicBoolean(false);
     private static final AtomicBoolean cudaWarnLoggedOnce = new AtomicBoolean(false);
     private static final AtomicBoolean dmlWarnLoggedOnce = new AtomicBoolean(false);
+    private static final AtomicBoolean rocmWarnLoggedOnce = new AtomicBoolean(false);
     private static final AtomicBoolean noGpuWarnLoggedOnce = new AtomicBoolean(false);
 
     // GPU slot: when offload_models=true, only one session is alive at a time.
@@ -321,9 +322,24 @@ public final class OnnxModel implements AutoCloseable {
                 }
             }
         }
+
+        if (!added) {
+            try {
+                opts = new OrtSession.SessionOptions();
+                opts.addROCM(0);
+                added = true;
+                setResolvedProviderOnce("ROCm");
+            } catch (Throwable t) {
+                if (rocmWarnLoggedOnce.compareAndSet(false, true)) {
+                    LOG.warn("ROCm not available: {} - {}. This is expected if you are not using a ROCm build.",
+                            t.getClass().getSimpleName(), t.getMessage());
+                }
+            }
+        }
+
         if (gpuRequired && !added) {
             throw new OrtException(
-                    "inference.device=gpu but neither CUDA nor DirectML is available. " +
+                    "inference.device=gpu but neither CUDA nor DirectML nor ROCm is available. " +
                     "Use the GPU build or set inference.device=cpu.");
         }
         if (!added) {
