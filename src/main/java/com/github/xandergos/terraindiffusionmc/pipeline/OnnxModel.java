@@ -326,7 +326,7 @@ public final class OnnxModel implements AutoCloseable {
         if (!added) {
             try {
                 opts = new OrtSession.SessionOptions();
-                opts.addROCM(0);
+                opts.addROCM();
                 added = true;
                 setResolvedProviderOnce("ROCm");
             } catch (Throwable t) {
