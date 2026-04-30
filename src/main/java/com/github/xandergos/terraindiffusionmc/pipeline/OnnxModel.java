@@ -33,6 +33,7 @@ public final class OnnxModel implements AutoCloseable {
     private static final AtomicBoolean providerLoggedOnce = new AtomicBoolean(false);
     private static final AtomicBoolean cudaWarnLoggedOnce = new AtomicBoolean(false);
     private static final AtomicBoolean dmlWarnLoggedOnce = new AtomicBoolean(false);
+    private static final AtomicBoolean openvinoWarnLoggedOnce = new AtomicBoolean(false);
     private static final AtomicBoolean noGpuWarnLoggedOnce = new AtomicBoolean(false);
 
     // GPU slot: when offload_models=true, only one session is alive at a time.
@@ -321,6 +322,21 @@ public final class OnnxModel implements AutoCloseable {
                 }
             }
         }
+
+        if (!added) {
+            try {
+                // Let OpenVINO provider decide the optimal device (CPU, iGPU, or dGPU) based on availability.
+                opts.addOpenVINO("");
+                added = true;
+                setResolvedProviderOnce("OpenVINO");
+            } catch (Throwable t) {
+                if (openvinoWarnLoggedOnce.compareAndSet(false, true)) {
+                    LOG.warn("OpenVINO not available: {} - {}. This is expected if you are not using an OpenVINO build.",
+                            t.getClass().getSimpleName(), t.getMessage());
+                }
+            }
+        }
+
         if (gpuRequired && !added) {
             throw new OrtException(
                     "inference.device=gpu but neither CUDA nor DirectML is available. " +
