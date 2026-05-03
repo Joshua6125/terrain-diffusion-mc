@@ -9,22 +9,21 @@ import java.security.MessageDigest
 
 def useCuda = project.hasProperty('useCuda') && project.property('useCuda').toString().toLowerCase() == 'true'
 def useDml = project.hasProperty('useDml') && project.property('useDml').toString().toLowerCase() == 'true'
-def useMigraphX = project.hasProperty('useMigraphX') && project.property('useMigraphX').toString().toLowerCase() == 'true'
 def useCpu = project.hasProperty('useCpu') && project.property('useCpu').toString().toLowerCase() == 'true'
 def withSourcesJar = project.hasProperty('withSourcesJar') && project.property('withSourcesJar').toString().toLowerCase() == 'true'
 
-if ([useCuda, useDml, useMigraphX, useCpu].count { it } > 1) {
-    throw new GradleException("Only one of -PuseCuda, -PuseDml, -PuseMigraphX, or -PuseCpu may be specified at a time.")
+if ([useCuda, useDml, useCpu].count { it } > 1) {
+    throw new GradleException("Only one of -PuseCuda, -PuseDml, or -PuseCpu may be specified at a time.")
 }
-if (!useDml && !useCpu && !useCuda && !useMigraphX) useDml = true
+if (!useDml && !useCpu && !useCuda) useDml = true
 
-println "Build variant: ${useCuda ? 'CUDA' : useDml ? 'DirectML (Windows)' : useMigraphX ? 'MIGraphX (Linux)' : 'CPU'}"
+println "Build variant: ${useCuda ? 'CUDA' : useDml ? 'DirectML (Windows)' : 'CPU'}"
 def modelRepositorySlug = 'xandergos/terrain-diffusion-30m-onnx'
 def modelRepositoryRevision = 'ad2df557eca5645f588766101cf3bc3682455c3e'
 def generatedManifestDirectory = layout.buildDirectory.dir('generated/model-assets').get().asFile
 def generatedManifestFile = new File(generatedManifestDirectory, 'model-assets-manifest.json')
 
-def buildVariant = useCuda ? 'cuda' : useDml ? 'windows' : useMigraphX ? 'migraphx' : 'cpu'
+def buildVariant = useCuda ? 'cuda' : useDml ? 'windows' : 'cpu'
 version = "${project.mod_version}-${buildVariant}+${project.minecraft_version}"
 group = project.maven_group
 
@@ -81,8 +80,6 @@ dependencies {
     } else if (useDml) {
         implementation 'com.microsoft.onnxruntime:onnxruntime-dml:1.0'
         include 'com.microsoft.onnxruntime:onnxruntime-dml:1.0'
-    } else if (useMigraphX) {
-        implementation files('libs/onnxruntime-migraphx.jar')
     }
 }
 
@@ -135,15 +132,6 @@ java {
 }
 
 jar {
-    if (useMigraphX) {
-        from({ zipTree(rootProject.file('libs/onnxruntime-migraphx.jar')) }) {
-            exclude 'META-INF/MANIFEST.MF'
-            exclude 'META-INF/*.SF'
-            exclude 'META-INF/*.DSA'
-            exclude 'META-INF/*.RSA'
-        }
-    }
-
     from("LICENSE") {
         rename { "${it}_${project.archivesBaseName}" }
     }
@@ -233,7 +221,7 @@ tasks.register('generateModelAssetManifest') {
 def isWindows = System.getProperty('os.name').toLowerCase().startsWith('windows')
 def gradlewExecutable = rootProject.file(isWindows ? 'gradlew.bat' : 'gradlew').absolutePath
 
-['Cuda', 'Dml', 'MigraphX', 'Cpu'].each { variant ->
+['Cuda', 'Dml', 'Cpu'].each { variant ->
     tasks.register("build${variant}", Exec) {
         workingDir rootProject.projectDir
         commandLine gradlewExecutable, 'build', "-Puse${variant}=true"
@@ -241,7 +229,7 @@ def gradlewExecutable = rootProject.file(isWindows ? 'gradlew.bat' : 'gradlew').
 }
 
 tasks.register('buildAll') {
-    dependsOn 'buildCuda', 'buildDml', 'buildMigraphX', 'buildCpu'
+    dependsOn 'buildCuda', 'buildDml', 'buildCpu'
 }
 
 String sha256Hex(byte[] fileBytes) {
