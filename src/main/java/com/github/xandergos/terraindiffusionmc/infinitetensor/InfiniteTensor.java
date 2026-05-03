@@ -1,11 +1,11 @@
 package com.github.xandergos.terraindiffusionmc.infinitetensor;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.Map;
 
 /**
  * A lazy, sliding-window "infinite" tensor backed by a {@link MemoryTileStore}.
@@ -139,21 +139,20 @@ public class InfiniteTensor {
      * at least one range).
      */
     void ensureComputedRanges(List<int[][]> pixelRanges) {
-        Set<List<Integer>> pendingSet = new LinkedHashSet<>();
+        Map<String, int[]> pendingMap = new LinkedHashMap<>();
         for (int[][] range : pixelRanges) {
             int[] lo = outputWindow.getLowestIntersection(range);
             int[] hi = outputWindow.getHighestIntersection(range);
             iterateWindows(lo, hi, wi -> {
                 if (!store.isWindowCached(id, wi)) {
-                    List<Integer> key = new ArrayList<>(wi.length);
-                    for (int v : wi) key.add(v);
-                    pendingSet.add(key);
+                    String key = Arrays.toString(wi);
+                    if (!pendingMap.containsKey(key)) {
+                        pendingMap.put(key, wi.clone());
+                    }
                 }
             });
         }
-        List<int[]> pending = pendingSet.stream()
-                .map(k -> k.stream().mapToInt(Integer::intValue).toArray())
-                .collect(Collectors.toList());
+        List<int[]> pending = new ArrayList<>(pendingMap.values());
         if (pending.isEmpty()) return;
 
         // Dependencies get the exact list of pixel ranges (one per our pending window), not a union.
