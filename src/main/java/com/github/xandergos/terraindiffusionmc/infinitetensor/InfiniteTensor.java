@@ -3,9 +3,8 @@ package com.github.xandergos.terraindiffusionmc.infinitetensor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 
 /**
  * A lazy, sliding-window "infinite" tensor backed by a {@link MemoryTileStore}.
@@ -139,21 +138,28 @@ public class InfiniteTensor {
      * at least one range).
      */
     void ensureComputedRanges(List<int[][]> pixelRanges) {
-        Map<String, int[]> pendingMap = new LinkedHashMap<>();
+        // Reuses insertion order, avoids String allocations from Arrays.toString(wi).
+        LinkedHashSet<WindowKey> pendingSet = new LinkedHashSet<>();
+
         for (int[][] range : pixelRanges) {
             int[] lo = outputWindow.getLowestIntersection(range);
             int[] hi = outputWindow.getHighestIntersection(range);
+
             iterateWindows(lo, hi, wi -> {
                 if (!store.isWindowCached(id, wi)) {
-                    String key = Arrays.toString(wi);
-                    if (!pendingMap.containsKey(key)) {
-                        pendingMap.put(key, wi.clone());
-                    }
+                    // Clone once only for windows we actually need to remember.
+                    pendingSet.add(new WindowKey(wi));
                 }
             });
         }
-        List<int[]> pending = new ArrayList<>(pendingMap.values());
-        if (pending.isEmpty()) return;
+
+        if (pendingSet.isEmpty()) return;
+
+        // Extract the raw indices from the keys.
+        List<int[]> pending = new ArrayList<>(pendingSet.size());
+        for (WindowKey key : pendingSet) {
+            pending.add(key.index);
+        }
 
         // Dependencies get the exact list of pixel ranges (one per our pending window), not a union.
         for (int i = 0; i < deps.length; i++) {
@@ -257,25 +263,52 @@ public class InfiniteTensor {
 
     /**
      * Iterate over all window index combinations in the inclusive range [lo, hi].
+     *
+     * The array passed to {@code action} is reused and mutable. Clone it inside the
+     * callback if you need to keep it.
      */
     static void iterateWindows(int[] lo, int[] hi, WindowConsumer action) {
         int n = lo.length;
         for (int d = 0; d < n; d++) {
             if (lo[d] > hi[d]) return;
         }
+
         int[] current = lo.clone();
 
         outer:
         while (true) {
-            action.accept(current.clone());
+            action.accept(current);
 
             // Increment like a mixed-radix counter (last dim first).
             for (int d = n - 1; d >= 0; d--) {
                 current[d]++;
-                if (current[d] <= hi[d]) break;
+                if (current[d] <= hi[d]) {
+                    break;
+                }
                 current[d] = lo[d];
                 if (d == 0) break outer;
             }
+        }
+    }
+
+    /** Immutable key for deduplicating window indices without String allocation. */
+    private static final class WindowKey {
+        final int[] index;
+        private final int hash;
+
+        WindowKey(int[] index) {
+            this.index = index.clone();
+            this.hash = Arrays.hashCode(this.index);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return (o instanceof WindowKey other) && Arrays.equals(index, other.index);
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
         }
     }
 
