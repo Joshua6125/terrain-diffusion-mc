@@ -175,9 +175,15 @@ public final class WorldPipeline implements AutoCloseable {
         for (int k = 0; k < sample.length; k++) sample[k] *= sched.sigmas[0];
 
         // 20-step DPM-Solver++
+        float[] xIn = new float[11 * S * S];
+        long[] xShape = new long[]{1, 11, S, S};
+        float[] noiseLabels = new float[1];
         float[][] condInputs = new float[5][1];
         long[][] condShapes  = new long[5][1];
-        for (int ci = 0; ci < 5; ci++) { condInputs[ci] = new float[]{COND_VALS[ci]}; condShapes[ci] = new long[]{1}; }
+        for (int ci = 0; ci < 5; ci++) {
+            condInputs[ci][0] = COND_VALS[ci];
+            condShapes[ci][0] = 1L;
+        }
 
         LOG.debug("Coarse model called for chunk ({}, {}) tile pixels [{}, {}]-[{}, {}] (20 steps)", i, j, i1, j1, i1 + S, j1 + S);
         for (int step = 0; step < 20; step++) {
@@ -185,12 +191,14 @@ public final class WorldPipeline implements AutoCloseable {
             float cnoise = EDMScheduler.trigflowPreconditionNoise(sigma);
             float[] scaledIn = EDMScheduler.preconditionInputs(sample, sigma);
 
-            float[] xIn = new float[11 * S * S];
             System.arraycopy(scaledIn, 0, xIn, 0, 6 * S * S);
             System.arraycopy(condMixed, 0, xIn, 6 * S * S, 5 * S * S);
+            noiseLabels[0] = cnoise;
 
+            
             float[] modelOut = coarseModel.runModel(
-                    xIn, new long[]{1, 11, S, S}, new float[]{cnoise}, condInputs, condShapes);
+                    xIn, xShape, noiseLabels, condInputs, condShapes);
+
             sample = sched.step(modelOut, sample);
         }
 

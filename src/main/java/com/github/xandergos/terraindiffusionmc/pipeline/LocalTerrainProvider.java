@@ -61,8 +61,8 @@ public final class LocalTerrainProvider {
     private static record CacheKey(int i1, int j1, int i2, int j2) {}
     private static record CacheEntry(HeightmapData data, AtomicLong lastAccessed) {}
 
-    private static final int MAX_CACHE_SIZE = 64;
-    private static final int MAX_CACHE_SIZE_HEADROOM = 8;
+    private static final int MAX_CACHE_SIZE = 256;
+    private static final int MAX_CACHE_SIZE_HEADROOM = 32;
     private static final Map<CacheKey, CacheEntry> CACHE = new ConcurrentHashMap<>();
     private static final AtomicLong CACHE_CLOCK = new AtomicLong();
     private static final Map<CacheKey, Future<HeightmapData>> PENDING = new ConcurrentHashMap<>();
@@ -230,13 +230,34 @@ public final class LocalTerrainProvider {
     }
 
     private static void evictLruTo(int maxSize) {
-        int headroomHalf = MAX_CACHE_SIZE_HEADROOM / 2;
-        if (CACHE.size() > maxSize + headroomHalf) {
-            CACHE.entrySet().stream()
-                .sorted(Comparator.comparingLong(e -> e.getValue().lastAccessed.get()))
-                .limit(MAX_CACHE_SIZE_HEADROOM)
-                .map(Map.Entry::getKey)
-                .forEach(CACHE::remove);
+        if (CACHE.size() > maxSize) {
+            // Single-pass selection: find the oldest MAX_CACHE_SIZE_HEADROOM entries
+            // without sorting to avoid allocation and O(n log n) overhead.
+            long[] minTimes = new long[MAX_CACHE_SIZE_HEADROOM];
+            for (int i = 0; i < MAX_CACHE_SIZE_HEADROOM; i++) minTimes[i] = Long.MAX_VALUE;
+            
+            for (Map.Entry<CacheKey, CacheEntry> entry : CACHE.entrySet()) {
+                long accessTime = entry.getValue().lastAccessed.get();
+                // Find insertion point in minTimes (keep oldest times)
+                for (int i = 0; i < MAX_CACHE_SIZE_HEADROOM; i++) {
+                    if (accessTime < minTimes[i]) {
+                        // Shift and insert
+                        if (i < MAX_CACHE_SIZE_HEADROOM - 1) {
+                            System.arraycopy(minTimes, i, minTimes, i + 1, MAX_CACHE_SIZE_HEADROOM - i - 1);
+                        }
+                        minTimes[i] = accessTime;
+                        break;
+                    }
+                }
+            }
+            
+            // Collect all entries with times in minTimes and remove them
+            java.util.Set<Long> timesToRemove = new java.util.HashSet<>();
+            for (long t : minTimes) {
+                if (t != Long.MAX_VALUE) timesToRemove.add(t);
+            }
+            
+            CACHE.entrySet().removeIf(e -> timesToRemove.contains(e.getValue().lastAccessed.get()) && CACHE.size() > maxSize);
         }
     }
 
