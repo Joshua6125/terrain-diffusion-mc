@@ -159,24 +159,16 @@ public final class SyntheticMapFactory {
             }
         }
 
-        // Reshape to [ch][H][W]
-        float[][] ch2d = new float[N_CHANNELS][H * W];
-        System.arraycopy(rawChannels[0], 0, ch2d[0], 0, H * W);
-        System.arraycopy(rawChannels[1], 0, ch2d[1], 0, H * W);
-        System.arraycopy(rawChannels[2], 0, ch2d[2], 0, H * W);
-        System.arraycopy(rawChannels[3], 0, ch2d[3], 0, H * W);
-        System.arraycopy(rawChannels[4], 0, ch2d[4], 0, H * W);
-
-        // Post-process as per sample_full_synthetic_map
+        // Post-process as per sample_full_synthetic_map (reuse rawChannels directly, no ch2d copy)
         float[][][] result = new float[N_CHANNELS][H][W];
         for (int r = 0; r < H; r++) {
             for (int c = 0; c < W; c++) {
                 int idx = r * W + c;
-                float elev = ch2d[0][idx];
-                float temp = ch2d[1][idx];
-                float tempStd = ch2d[2][idx];
-                float precip = ch2d[3][idx];
-                float precipStd = ch2d[4][idx];
+                float elev = rawChannels[0][idx];
+                float temp = rawChannels[1][idx];
+                float tempStd = rawChannels[2][idx];
+                float precip = rawChannels[3][idx];
+                float precipStd = rawChannels[4][idx];
 
                 // Temp: correct for lapse rate based on elevation
                 float lapseRate = -6.5f + 0.0015f * precip;
