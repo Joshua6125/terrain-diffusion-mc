@@ -61,8 +61,8 @@ public final class LocalTerrainProvider {
     private static record CacheKey(int i1, int j1, int i2, int j2) {}
     private static record CacheEntry(HeightmapData data, AtomicLong lastAccessed) {}
 
-    private static final int MAX_CACHE_SIZE = 256;
-    private static final int MAX_CACHE_SIZE_HEADROOM = 32;
+    private static final int MAX_CACHE_SIZE = 64;
+    private static final int MAX_CACHE_SIZE_HEADROOM = 8;
     private static final Map<CacheKey, CacheEntry> CACHE = new ConcurrentHashMap<>();
     private static final AtomicLong CACHE_CLOCK = new AtomicLong();
     private static final Map<CacheKey, Future<HeightmapData>> PENDING = new ConcurrentHashMap<>();
